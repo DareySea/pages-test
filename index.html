@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Проверка доступа</title>
+  <style>
+    body { margin: 0; background: #000; color: #fff; font: 16px/1.45 system-ui, sans-serif; padding: 32px 16px; }
+    main { max-width: 640px; margin: 0 auto; }
+    h1 { font-size: 32px; font-weight: 400; line-height: 1; letter-spacing: -0.8px; margin: 0 0 8px; }
+    .muted { color: #767d88; }
+    ul { list-style: none; padding: 0; margin: 28px 0; }
+    li { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid #27272a; }
+    li b { flex: none; width: 28px; font-weight: 400; }
+    .ok b { color: #4ade80; } .fail b { color: #f87171; } .wait b { color: #767d88; }
+    li small { display: block; color: #767d88; }
+    #summary { font-size: 20px; margin: 0 0 8px; }
+    img { width: 120px; border-radius: 8px; background: #1a1a1a; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Проверка доступа к будущему сайту</h1>
+  <p class="muted">Откройте эту страницу без VPN, подождите 15 секунд и пришлите скриншот.</p>
+  <ul id="checks"></ul>
+  <p id="summary" class="muted">Проверяю…</p>
+  <p class="muted" id="meta"></p>
+  <img id="poster" alt="Постер для проверки">
+</main>
+<script>
+  const checks = [
+    ['Страница с GitHub Pages открылась', 'если вы видите этот текст — да', () => Promise.resolve()],
+    ['Файл со списком фильмов', 'films.json с того же адреса', () => fetch('films.json').then(r => r.json()).then(d => { if (!d.length) throw 0; })],
+    ['Постер с Кинопоиска', 'kinopoiskapiunofficial.tech → avatars.mds.yandex.net', () => loadImg('poster', 'https://kinopoiskapiunofficial.tech/images/posters/kp/301.jpg')],
+    ['Картинка новости Кинопоиска', 'avatars.mds.yandex.net', () => loadImg(null, 'https://avatars.mds.yandex.net/get-kinopoisk-post-thumb/879158/1e4d7a8d8d3c879e5f8126d8d80a9330/orig')],
+    ['Новости Кинопоиска', 'kinopoisk.ru/news.rss', () => rss('https://www.kinopoisk.ru/news.rss')],
+    ['Новости Канобу', 'kanobu.ru/rss/news.xml', () => rss('https://kanobu.ru/rss/news.xml')],
+    ['API Кинопоиска отвечает', 'kinopoiskapiunofficial.tech (ответ «нужен ключ» — это нормально)', () => fetch('https://kinopoiskapiunofficial.tech/api/v2.2/films/301', { headers: { 'X-API-KEY': 'test' } }).then(r => { if (r.status !== 401 && !r.ok) throw r.status; })],
+    ['API GitHub для сохранения', 'api.github.com (нужно только админу)', () => fetch('https://api.github.com/zen').then(r => { if (!r.ok) throw r.status; })],
+  ];
+  function loadImg(id, src) {
+    return new Promise((ok, fail) => { const i = id ? document.getElementById(id) : new Image(); i.onload = ok; i.onerror = fail; i.src = src; });
+  }
+  function rss(url) {
+    return fetch(url).then(r => r.text()).then(t => { if (!t.includes('<item')) throw 'нет новостей'; });
+  }
+  const timeout = p => Promise.race([p, new Promise((_, f) => setTimeout(() => f('не ответил за 12 с'), 12000))]);
+  const list = document.getElementById('checks');
+  let done = 0, okCount = 0;
+  checks.forEach(([name, hint, run]) => {
+    const li = document.createElement('li');
+    li.className = 'wait';
+    li.innerHTML = '<b>…</b><div></div>';
+    li.lastChild.textContent = name;
+    li.lastChild.insertAdjacentHTML('beforeend', '<small></small>');
+    li.querySelector('small').textContent = hint;
+    list.append(li);
+    const t0 = performance.now();
+    timeout(run()).then(() => { li.className = 'ok'; li.firstChild.textContent = '✓'; okCount++; },
+      e => { li.className = 'fail'; li.firstChild.textContent = '✗'; li.querySelector('small').textContent += ' — ошибка: ' + (e && e.message || e || 'нет доступа'); })
+      .finally(() => {
+        li.querySelector('small').textContent += ` (${Math.round(performance.now() - t0)} мс)`;
+        if (++done === checks.length) {
+          document.getElementById('summary').textContent = `Итог: ${okCount} из ${checks.length} проверок прошли`;
+          document.getElementById('summary').className = '';
+        }
+      });
+  });
+  document.getElementById('meta').textContent = new Date().toLocaleString('ru-RU') + ' · ' + navigator.userAgent.split(') ')[0] + ')';
+</script>
+</body>
+</html>
